@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: lang-learn
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "Language Learning MLOps Platform Project"
+
+  # Repositories allowed for this project
+  sourceRepos:
+    - "ghcr.io/rickdevma100/charts"
+    - "https://github.com/rickdevma100/lang-learn-gitops"
+    - "https://github.com/rickdevma100/lang-learn-helm-charts"
+    - "https://github.com/rickdevma100/lang-learn-monitoring"
+    - "https://prometheus-community.github.io/helm-charts"
+    - "https://charts.min.io/"
+
+  # Destination clusters and namespaces allowed
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: "lang-learn"
+    - server: "https://kubernetes.default.svc"
+      namespace: "lang-learn-staging"
+    - server: "https://kubernetes.default.svc"
+      namespace: "monitoring"
+    - server: "https://kubernetes.default.svc"
+      namespace: "argocd"
+
+  # Cluster-scoped resources allowed (e.g. Kyverno ClusterPolicy, Namespace)
+  clusterResourceWhitelist:
+    - group: "kyverno.io"
+      kind: "ClusterPolicy"
+    - group: "monitoring.coreos.com"
+      kind: "PrometheusRule"
+    - group: "monitoring.coreos.com"
+      kind: "AlertmanagerConfig"
+    - group: "monitoring.coreos.com"
+      kind: "ServiceMonitor"
+    - group: ""
+      kind: "Namespace"
+
+  # Namespace-scoped resources allowed
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Roles and RBAC for this project
+  roles:
+    - name: read-only
+      description: "Read-only access to lang-learn applications"
+      policies:
+        - p, proj:lang-learn:read-only, applications, get, lang-learn/*, allow
+    - name: admin
+      description: "Full management access to lang-learn applications"
+      policies:
+        - p, proj:lang-learn:admin, applications, *, lang-learn/*, allow

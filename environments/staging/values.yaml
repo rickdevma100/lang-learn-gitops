@@ -1,0 +1,40 @@
+namespace: lang-learn-staging
+
+inference:
+  image:
+    repository: ghcr.io/rickdevma100/inference
+    tag: sha-staging
+
+frontend:
+  image:
+    repository: ghcr.io/rickdevma100/frontend
+    tag: sha-staging
+  replicas: 1
+
+optimizer:
+  image:
+    repository: ghcr.io/rickdevma100/optimizer
+    tag: sha-staging
+  replicas: 1
+
+llamacpp:
+  primary:
+    modelFile: gemma-4-e4b-it-Q5_K_M.gguf
+    threads: 2
+  fallback:
+    modelFile: gemma-4-e2b-it-Q5_K_M.gguf
+    threads: 2
+
+model:
+  version: "gemma-4-e4b-q5-2026-07-28"
+
+minio:
+  enabled: true
+  fullnameOverride: "lang-learn-minio"
+  storage: 5Gi
+
+redis:
+  enabled: true
+
+mlflow:
+  enabled: true

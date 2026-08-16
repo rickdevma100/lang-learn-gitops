@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference
+  namespace: argocd
+spec:
+  project: lang-learn
+  sources:
+    - repoURL: ghcr.io/rickdevma100/charts
+      chart: inference
+      targetRevision: 0.1.0
+      helm:
+        valueFiles:
+          - $values/environments/production/values.yaml
+    - repoURL: https://github.com/rickdevma100/lang-learn-gitops
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lang-learn
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
