@@ -6,7 +6,7 @@ inference:
 frontend:
   image:
     repository: ghcr.io/rickdevma100/frontend
-    tag: sha-d72ed4777923
+    tag: sha-7022ed2836cf
   replicas: 2
 optimizer:
   image:
