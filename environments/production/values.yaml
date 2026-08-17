@@ -1,22 +1,18 @@
 namespace: lang-learn
-
 inference:
   image:
     repository: ghcr.io/rickdevma100/inference
     tag: sha-initial
-
 frontend:
   image:
     repository: ghcr.io/rickdevma100/frontend
-    tag: sha-initial
+    tag: sha-9713045aee21
   replicas: 2
-
 optimizer:
   image:
     repository: ghcr.io/rickdevma100/optimizer
     tag: sha-initial
   replicas: 1
-
 llamacpp:
   primary:
     modelFile: gemma-4-e4b-it-Q5_K_M.gguf
@@ -24,17 +20,13 @@ llamacpp:
   fallback:
     modelFile: gemma-4-e2b-it-Q5_K_M.gguf
     threads: 4
-
 model:
   version: "gemma-4-e4b-q5-2026-07-28"
-
 minio:
   enabled: true
   fullnameOverride: "lang-learn-minio"
   storage: 10Gi
-
 redis:
   enabled: true
-
 mlflow:
   enabled: true
