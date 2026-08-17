@@ -11,7 +11,7 @@ frontend:
 optimizer:
   image:
     repository: ghcr.io/rickdevma100/optimizer
-    tag: sha-e89fa1f7c7ff
+    tag: sha-639012dcf787
   replicas: 1
 llamacpp:
   primary:
