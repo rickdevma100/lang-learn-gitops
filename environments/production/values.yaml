@@ -2,7 +2,7 @@ namespace: lang-learn
 inference:
   image:
     repository: ghcr.io/rickdevma100/inference
-    tag: sha-b26a9fa99d28
+    tag: sha-2f20f9b4c9c3
 frontend:
   image:
     repository: ghcr.io/rickdevma100/frontend
