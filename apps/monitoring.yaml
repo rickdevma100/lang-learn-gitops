@@ -46,6 +46,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: lang-learn
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: alertmanager-smtp-secret
+      jsonPointers:
+        - /data/smtp-password
+        - /stringData/smtp-password
   syncPolicy:
     automated:
       prune: true
