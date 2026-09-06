@@ -8,7 +8,7 @@ spec:
   sources:
     - repoURL: ghcr.io/rickdevma100/charts
       chart: inference
-      targetRevision: 0.2.0
+      targetRevision: 0.2.1
       helm:
         valueFiles:
           - $values/environments/production/values.yaml
