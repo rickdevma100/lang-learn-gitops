@@ -3,6 +3,16 @@ inference:
   image:
     repository: ghcr.io/rickdevma100/inference
     tag: sha-ed929e407917
+  backend: "external"
+  model:
+    path: ""
+  resources:
+    requests:
+      memory: "1.5Gi"
+      cpu: "500m"
+    limits:
+      memory: "3Gi"
+      cpu: "2"
 frontend:
   image:
     repository: ghcr.io/rickdevma100/frontend
@@ -13,15 +23,16 @@ optimizer:
     repository: ghcr.io/rickdevma100/optimizer
     tag: sha-db62010046d2
   replicas: 1
-llamacpp:
-  primary:
-    modelFile: gemma-4-e4b-it-Q5_K_M.gguf
-    threads: 4
-  fallback:
-    modelFile: gemma-4-e2b-it-Q5_K_M.gguf
-    threads: 4
+# llamacpp config retained for rollback reference (not used with external backend)
+# llamacpp:
+#   primary:
+#     modelFile: gemma-4-e4b-it-Q5_K_M.gguf
+#     threads: 4
+#   fallback:
+#     modelFile: gemma-4-e2b-it-Q5_K_M.gguf
+#     threads: 4
 model:
-  version: "gemma-4-e4b-q5-2026-07-28"
+  version: "external-llm-2026-09-26"
 minio:
   enabled: true
   fullnameOverride: "lang-learn-minio"
