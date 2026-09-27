@@ -20,26 +20,12 @@ spec:
   # Destination clusters and namespaces allowed
   destinations:
     - server: "https://kubernetes.default.svc"
-      namespace: "lang-learn"
-    - server: "https://kubernetes.default.svc"
-      namespace: "lang-learn-staging"
-    - server: "https://kubernetes.default.svc"
-      namespace: "monitoring"
-    - server: "https://kubernetes.default.svc"
-      namespace: "argocd"
+      namespace: "*"
 
-  # Cluster-scoped resources allowed (e.g. Kyverno ClusterPolicy, Namespace)
+  # Cluster-scoped resources allowed (e.g. Kyverno ClusterPolicy, Namespace, CRDs, ClusterRoles)
   clusterResourceWhitelist:
-    - group: "kyverno.io"
-      kind: "ClusterPolicy"
-    - group: "monitoring.coreos.com"
-      kind: "PrometheusRule"
-    - group: "monitoring.coreos.com"
-      kind: "AlertmanagerConfig"
-    - group: "monitoring.coreos.com"
-      kind: "ServiceMonitor"
-    - group: ""
-      kind: "Namespace"
+    - group: "*"
+      kind: "*"
 
   # Namespace-scoped resources allowed
   namespaceResourceWhitelist:
