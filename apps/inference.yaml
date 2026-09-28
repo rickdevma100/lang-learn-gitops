@@ -25,3 +25,10 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  ignoreDifferences:
+    - group: serving.kserve.io
+      kind: InferenceService
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/finalizers
+        - /spec/predictor/containers/0/startupProbe
