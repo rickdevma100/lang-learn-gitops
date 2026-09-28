@@ -19,6 +19,9 @@ spec:
               enabled: true
               label: grafana_dashboard
               searchNamespace: ALL
+        prometheusOperator:
+          admissionWebhooks:
+            enabled: false
         alertmanager:
           enabled: true
   destination:
