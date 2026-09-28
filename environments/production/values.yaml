@@ -36,6 +36,8 @@ model:
 minio:
   enabled: true
   fullnameOverride: "lang-learn-minio"
+  image:
+    repository: minio/minio
   storage: 10Gi
 redis:
   enabled: true
