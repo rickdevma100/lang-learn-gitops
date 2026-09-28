@@ -32,7 +32,8 @@ minio:
   enabled: true
   fullnameOverride: "lang-learn-minio"
   image:
-    repository: minio/minio
+    repository: cgr.dev/chainguard/minio
+    tag: latest
   storage: 5Gi
 
 redis:
