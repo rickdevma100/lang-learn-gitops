@@ -39,6 +39,11 @@ minio:
   image:
     repository: cgr.dev/chainguard/minio
     tag: latest
+  mcImage:
+    repository: cgr.dev/chainguard/minio-client
+    tag: latest-dev
+  buckets: []
+  users: []
   storage: 10Gi
 redis:
   enabled: true
