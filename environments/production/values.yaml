@@ -8,7 +8,7 @@ inference:
     path: ""
   resources:
     requests:
-      memory: "1.5Gi"
+      memory: "1536Mi"
       cpu: "500m"
     limits:
       memory: "3Gi"
