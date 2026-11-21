@@ -15,6 +15,7 @@ spec:
     - "https://github.com/rickdevma100/lang-learn-helm-charts"
     - "https://github.com/rickdevma100/lang-learn-monitoring"
     - "https://prometheus-community.github.io/helm-charts"
+    - "https://grafana.github.io/helm-charts"
     - "https://charts.min.io/"
 
   # Destination clusters and namespaces allowed

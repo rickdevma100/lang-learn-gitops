@@ -1,0 +1,296 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: lang-learn
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "7.6.*"
+    helm:
+      releaseName: loki
+      values: |
+        deploymentMode: SingleBinary
+
+        loki:
+          auth_enabled: false
+
+          commonConfig:
+            replication_factor: 1
+
+          storage:
+            type: s3
+            bucketNames:
+              chunks: log-mover-bucket-lab
+              ruler: log-mover-bucket-lab
+              admin: log-mover-bucket-lab
+            s3:
+              endpoint: http://192.168.2.1:4566
+              region: us-east-1
+              accessKeyId: ${AWS_ACCESS_KEY_ID}
+              secretAccessKey: ${AWS_SECRET_ACCESS_KEY}
+              s3ForcePathStyle: true
+              insecure: true
+
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: s3
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+
+          ingester:
+            chunk_encoding: snappy
+            chunk_target_size: 1572864
+            chunk_idle_period: 30m
+            max_chunk_age: 2h
+
+          compactor:
+            compaction_interval: 10m
+            retention_enabled: true
+            delete_request_store: s3
+
+          limits_config:
+            retention_period: 168h
+
+        singleBinary:
+          replicas: 1
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: loki-s3-credentials
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          persistence:
+            enabled: true
+            storageClass: microk8s-hostpath
+            size: 10Gi
+
+        gateway:
+          enabled: true
+          replicas: 1
+
+        minio:
+          enabled: false
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        ingester:
+          replicas: 0
+        querier:
+          replicas: 0
+        queryFrontend:
+          replicas: 0
+        queryScheduler:
+          replicas: 0
+        distributor:
+          replicas: 0
+        compactor:
+          replicas: 0
+        indexGateway:
+          replicas: 0
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: lang-learn
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "1.16.*"
+    helm:
+      releaseName: alloy
+      values: |
+        alloy:
+          mounts:
+            varlog: true
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          configMap:
+            create: true
+            content: |
+              // Stage 1: Discover all pods running on this MicroK8s node
+              discovery.kubernetes "pods" {
+                role = "pod"
+                selectors {
+                  role  = "pod"
+                  field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+                }
+              }
+
+              // Stage 2: Enrich with Kubernetes metadata labels
+              discovery.relabel "pod_logs" {
+                targets = discovery.kubernetes.pods.targets
+
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace"]
+                  target_label  = "namespace"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_name"]
+                  target_label  = "pod"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                  target_label  = "container"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_node_name"]
+                  target_label  = "node"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_controller_name"]
+                  target_label  = "deployment"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_label_app"]
+                  target_label  = "app"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_label_component"]
+                  target_label  = "component"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_label_instance"]
+                  target_label  = "instance"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+                  separator     = "/"
+                  target_label  = "__path__"
+                  replacement   = "/var/log/pods/*$1/*.log"
+                }
+              }
+
+              // Stage 3: Tail the CRI log files / Kubernetes pod logs
+              loki.source.kubernetes "pods" {
+                targets    = discovery.relabel.pod_logs.output
+                forward_to = [loki.process.pipeline.receiver]
+              }
+
+              // Stage 4: Parse CRI wrapper, keep labels, merge multiline, extract level & workflow_id
+              loki.process "pipeline" {
+                stage.cri {}
+
+                stage.static_labels {
+                  values = {
+                    job = "kubernetes-pods",
+                  }
+                }
+
+                stage.label_keep {
+                  values = [
+                    "namespace",
+                    "pod",
+                    "container",
+                    "node",
+                    "deployment",
+                    "app",
+                    "component",
+                    "instance",
+                    "job",
+                  ]
+                }
+
+                stage.multiline {
+                  firstline     = "^\\d{4}-\\d{2}-\\d{2}|^\\{"
+                  max_wait_time = "3s"
+                }
+
+                stage.json {
+                  expressions = {
+                    level       = "level",
+                    workflow_id = "workflow_id",
+                  }
+                }
+
+                stage.regex {
+                  expression = "(?i)(?:level=|\\b)(?P<level>DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\b"
+                }
+
+                stage.labels {
+                  values = {
+                    level       = "",
+                    workflow_id = "",
+                  }
+                }
+
+                forward_to = [loki.write.loki_endpoint.receiver]
+              }
+
+              // Stage 5: Batch (512KB / 1s) and push via HTTP POST to Loki Gateway
+              loki.write "loki_endpoint" {
+                endpoint {
+                  url        = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+                  tenant_id  = "fake"
+                  batch_size = "512KiB"
+                  batch_wait = "1s"
+                }
+              }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-datasource
+  namespace: argocd
+spec:
+  project: lang-learn
+  source:
+    repoURL: https://github.com/rickdevma100/lang-learn-gitops
+    targetRevision: main
+    path: platform/logging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
