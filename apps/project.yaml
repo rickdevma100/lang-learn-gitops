@@ -16,17 +16,44 @@ spec:
     - "https://github.com/rickdevma100/lang-learn-monitoring"
     - "https://prometheus-community.github.io/helm-charts"
     - "https://grafana.github.io/helm-charts"
+    - "https://argoproj.github.io/argo-helm"
     - "https://charts.min.io/"
 
   # Destination clusters and namespaces allowed
   destinations:
     - server: "https://kubernetes.default.svc"
-      namespace: "*"
+      namespace: "lang-learn"
+    - server: "https://kubernetes.default.svc"
+      namespace: "lang-learn-platform"
+    - server: "https://kubernetes.default.svc"
+      namespace: "school-*"
+    - server: "https://kubernetes.default.svc"
+      namespace: "monitoring"
+    - server: "https://kubernetes.default.svc"
+      namespace: "argo"
+    - server: "https://kubernetes.default.svc"
+      namespace: "argo-events"
+    - server: "https://kubernetes.default.svc"
+      namespace: "kube-system"
 
-  # Cluster-scoped resources allowed (e.g. Kyverno ClusterPolicy, Namespace, CRDs, ClusterRoles)
+  # Cluster-scoped resources allowed
   clusterResourceWhitelist:
-    - group: "*"
-      kind: "*"
+    - group: ""
+      kind: Namespace
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    - group: "kyverno.io"
+      kind: ClusterPolicy
+    - group: "argoproj.io"
+      kind: ClusterWorkflowTemplate
+    - group: "admissionregistration.k8s.io"
+      kind: MutatingWebhookConfiguration
+    - group: "admissionregistration.k8s.io"
+      kind: ValidatingWebhookConfiguration
 
   # Namespace-scoped resources allowed
   namespaceResourceWhitelist:

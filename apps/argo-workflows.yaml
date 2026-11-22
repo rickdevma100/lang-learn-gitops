@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows
+  namespace: argocd
+spec:
+  project: lang-learn
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-workflows
+    targetRevision: "0.45.*"
+    helm:
+      releaseName: argo-workflows
+      values: |
+        controller:
+          workflowNamespaces:
+            - argo
+            - lang-learn
+            - lang-learn-platform
+        server:
+          authModes:
+            - server
+        useDefaultArtifactRepo: true
+        useStaticCredentials: true
+        artifactRepository:
+          archiveLogs: true
+          s3:
+            bucket: dvc-store
+            endpoint: lang-learn-minio.lang-learn.svc.cluster.local:9000
+            insecure: true
+            accessKeySecret:
+              name: dvc-credentials
+              key: access_key
+            secretKeySecret:
+              name: dvc-credentials
+              key: secret_key
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-events
+  namespace: argocd
+spec:
+  project: lang-learn
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-events
+    targetRevision: "2.4.*"
+    helm:
+      releaseName: argo-events
+      values: |
+        configs:
+          jetstream:
+            versions:
+              - version: latest
+                natsImage: nats:2.10.22
+                metricsExporterImage: natsio/prometheus-nats-exporter:0.14.0
+                configReloaderImage: natsio/nats-server-config-reloader:0.14.0
+                startCommand: /nats-server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-events
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
