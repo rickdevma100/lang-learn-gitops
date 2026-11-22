@@ -1,15 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: school-onboarder-sa
+  namespace: argo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-synchronization-limits
+  namespace: argo
+data:
+  llm-batch-lock: "1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: school-onboarder-argo-role
+  namespace: argo
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["gitops-repo-creds"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: school-onboarder-argo-binding
+  namespace: argo
+subjects:
+  - kind: ServiceAccount
+    name: school-onboarder-sa
+    namespace: argo
+roleRef:
+  kind: Role
+  name: school-onboarder-argo-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: school-onboarder-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: school-onboarder-cluster-binding
+subjects:
+  - kind: ServiceAccount
+    name: school-onboarder-sa
+    namespace: argo
+roleRef:
+  kind: ClusterRole
+  name: school-onboarder-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: argoproj.io/v1alpha1
 kind: ClusterWorkflowTemplate
 metadata:
   name: onboard-school-tenant
 spec:
+  serviceAccountName: school-onboarder-sa
   entrypoint: onboard-pipeline
   arguments:
     parameters:
       - name: school_slug
-        description: "Lowercase identifier, e.g., school-berlin"
+        description: "DNS-safe lowercase identifier with hyphens, e.g., school-frankfurt"
       - name: school_domain
-        description: "Ingress hostname, e.g., berlin.langlearn.local"
+        description: "Ingress hostname, e.g., frankfurt.langlearn.local"
       - name: default_level
         value: "A2"
       - name: admin_email
@@ -36,7 +107,7 @@ spec:
             arguments:
               parameters:
                 - name: school_slug
-                  value: "{{workflow.parameters.school_slug}}"
+                  value: "{{tasks.commit-tenant-gitops.outputs.parameters.normalized_slug}}"
 
           - name: seed-reading-text-pool
             dependencies: [wait-for-silo-ready]
@@ -44,7 +115,7 @@ spec:
             arguments:
               parameters:
                 - name: school_slug
-                  value: "{{workflow.parameters.school_slug}}"
+                  value: "{{tasks.commit-tenant-gitops.outputs.parameters.normalized_slug}}"
 
           - name: prewarm-initial-exams
             dependencies: [seed-reading-text-pool]
@@ -52,7 +123,7 @@ spec:
             arguments:
               parameters:
                 - name: school_slug
-                  value: "{{workflow.parameters.school_slug}}"
+                  value: "{{tasks.commit-tenant-gitops.outputs.parameters.normalized_slug}}"
                 - name: level
                   value: "{{workflow.parameters.default_level}}"
                 - name: paper_count
@@ -61,6 +132,10 @@ spec:
           - name: send-welcome-email
             dependencies: [prewarm-initial-exams]
             template: notify-admin-step
+            arguments:
+              parameters:
+                - name: school_slug
+                  value: "{{tasks.commit-tenant-gitops.outputs.parameters.normalized_slug}}"
 
     - name: gitops-commit-step
       inputs:
@@ -68,29 +143,48 @@ spec:
           - name: school_slug
           - name: school_domain
           - name: default_level
+      outputs:
+        parameters:
+          - name: normalized_slug
+            valueFrom:
+              path: /tmp/normalized_slug.txt
       container:
         image: alpine/git:2.45.2
         command: [sh, -c]
         args:
           - |
             set -e
-            git clone https://$GIT_TOKEN@github.com/rickdevma100/lang-learn-gitops.git /tmp/gitops
+            # Normalize underscores/uppercase to valid Kubernetes DNS-1123 namespace slug
+            SLUG=$(printf '%s' "{{inputs.parameters.school_slug}}" | tr '[:upper:]_' '[:lower:]-')
+            printf '%s' "$SLUG" > /tmp/normalized_slug.txt
+            echo "Onboarding tenant namespace: $SLUG"
+            git clone "https://x-access-token:${GIT_TOKEN}@github.com/rickdevma100/lang-learn-gitops.git" /tmp/gitops
             cd /tmp/gitops
-            mkdir -p "environments/tenants/{{inputs.parameters.school_slug}}"
-            cat <<EOF > "environments/tenants/{{inputs.parameters.school_slug}}/values.yaml"
-            namespace: {{inputs.parameters.school_slug}}
+            mkdir -p "environments/tenants/${SLUG}"
+            cat <<EOF > "environments/tenants/${SLUG}/values.yaml"
+            namespace: ${SLUG}
+
             ingress:
               enabled: true
               ingressClassName: public
               host: {{inputs.parameters.school_domain}}
+
+            sharedPlatform:
+              namespace: lang-learn-platform
+              fallbackNamespace: lang-learn
+              inferenceUrl: "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local"
+              externalLlmUrl: "http://192.168.2.1:9090"
+
             cronWorkflow:
               enabled: true
+              schedule: "0 2 * * *"
               targetLevel: "{{inputs.parameters.default_level}}"
+              minPendingPapers: 5
             EOF
             git config user.name "Argo Onboarding Bot"
             git config user.email "bot@langlearn.local"
             git add .
-            git diff --staged --quiet || git commit -m "feat(tenant): onboard {{inputs.parameters.school_slug}}"
+            git diff --staged --quiet || git commit -m "feat(tenant): onboard ${SLUG}"
             git push origin main
         env:
           - name: GIT_TOKEN
@@ -104,21 +198,22 @@ spec:
         parameters:
           - name: school_slug
       container:
-        image: bitnami/kubectl:1.30
+        image: alpine:3.20
         command: [sh, -c]
         args:
           - |
             set -e
-            echo "Waiting for namespace {{inputs.parameters.school_slug}} and core deployments..."
-            for i in $(seq 1 30); do
+            apk add --no-cache kubectl >/dev/null
+            echo "Waiting for Argo CD to create namespace {{inputs.parameters.school_slug}}..."
+            for i in $(seq 1 40); do
               if kubectl get ns "{{inputs.parameters.school_slug}}" >/dev/null 2>&1; then
                 break
               fi
-              sleep 5
+              sleep 10
             done
-            kubectl rollout status deployment/redis-stack -n "{{inputs.parameters.school_slug}}" --timeout=180s
-            kubectl rollout status deployment/lang-learn-api -n "{{inputs.parameters.school_slug}}" --timeout=180s
-            kubectl rollout status deployment/frontend -n "{{inputs.parameters.school_slug}}" --timeout=180s
+            kubectl rollout status deployment/redis-stack -n "{{inputs.parameters.school_slug}}" --timeout=240s
+            kubectl rollout status deployment/lang-learn-api -n "{{inputs.parameters.school_slug}}" --timeout=240s
+            kubectl rollout status deployment/frontend -n "{{inputs.parameters.school_slug}}" --timeout=240s
 
     - name: seed-text-pool-step
       inputs:
@@ -174,9 +269,12 @@ spec:
             asyncio.run(main())
 
     - name: notify-admin-step
+      inputs:
+        parameters:
+          - name: school_slug
       container:
         image: python:3.11-slim
         command: [python, -c]
         args:
           - |
-            print("Onboarding complete for {{workflow.parameters.school_slug}} at https://{{workflow.parameters.school_domain}}")
+            print("Onboarding complete for {{inputs.parameters.school_slug}} at https://{{workflow.parameters.school_domain}}")
