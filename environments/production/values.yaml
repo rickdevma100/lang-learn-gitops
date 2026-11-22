@@ -2,7 +2,7 @@ namespace: lang-learn
 inference:
   image:
     repository: ghcr.io/rickdevma100/inference
-    tag: sha-267b2c5fff89
+    tag: sha-bf59e23157c7
   backend: "external"
   model:
     path: ""
@@ -49,3 +49,6 @@ redis:
   enabled: true
 mlflow:
   enabled: true
+api:
+  image:
+    tag: sha-bf59e23157c7
