@@ -26,7 +26,7 @@ rules:
     verbs: ["get", "patch"]
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["gitops-repo-creds"]
+    resourceNames: ["gitops-repo-creds", "dvc-credentials"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
