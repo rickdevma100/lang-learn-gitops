@@ -1,0 +1,18 @@
+namespace: school-munich
+
+ingress:
+  enabled: true
+  ingressClassName: public
+  host: munich.langlearn.local
+
+sharedPlatform:
+  namespace: lang-learn-platform
+  fallbackNamespace: lang-learn
+  inferenceUrl: "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local"
+  externalLlmUrl: "http://192.168.2.1:9090"
+
+cronWorkflow:
+  enabled: true
+  schedule: "30 2 * * *"
+  targetLevel: "A2"
+  minPendingPapers: 5

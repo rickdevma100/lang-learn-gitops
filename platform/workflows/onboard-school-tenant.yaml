@@ -1,0 +1,182 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: onboard-school-tenant
+spec:
+  entrypoint: onboard-pipeline
+  arguments:
+    parameters:
+      - name: school_slug
+        description: "Lowercase identifier, e.g., school-berlin"
+      - name: school_domain
+        description: "Ingress hostname, e.g., berlin.langlearn.local"
+      - name: default_level
+        value: "A2"
+      - name: admin_email
+        value: "admin@school.de"
+
+  templates:
+    - name: onboard-pipeline
+      dag:
+        tasks:
+          - name: commit-tenant-gitops
+            template: gitops-commit-step
+            arguments:
+              parameters:
+                - name: school_slug
+                  value: "{{workflow.parameters.school_slug}}"
+                - name: school_domain
+                  value: "{{workflow.parameters.school_domain}}"
+                - name: default_level
+                  value: "{{workflow.parameters.default_level}}"
+
+          - name: wait-for-silo-ready
+            dependencies: [commit-tenant-gitops]
+            template: wait-namespace-ready-step
+            arguments:
+              parameters:
+                - name: school_slug
+                  value: "{{workflow.parameters.school_slug}}"
+
+          - name: seed-reading-text-pool
+            dependencies: [wait-for-silo-ready]
+            template: seed-text-pool-step
+            arguments:
+              parameters:
+                - name: school_slug
+                  value: "{{workflow.parameters.school_slug}}"
+
+          - name: prewarm-initial-exams
+            dependencies: [seed-reading-text-pool]
+            template: generate-exam-batch-step
+            arguments:
+              parameters:
+                - name: school_slug
+                  value: "{{workflow.parameters.school_slug}}"
+                - name: level
+                  value: "{{workflow.parameters.default_level}}"
+                - name: paper_count
+                  value: "3"
+
+          - name: send-welcome-email
+            dependencies: [prewarm-initial-exams]
+            template: notify-admin-step
+
+    - name: gitops-commit-step
+      inputs:
+        parameters:
+          - name: school_slug
+          - name: school_domain
+          - name: default_level
+      container:
+        image: alpine/git:2.45.2
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            git clone https://$GIT_TOKEN@github.com/rickdevma100/lang-learn-gitops.git /tmp/gitops
+            cd /tmp/gitops
+            mkdir -p "environments/tenants/{{inputs.parameters.school_slug}}"
+            cat <<EOF > "environments/tenants/{{inputs.parameters.school_slug}}/values.yaml"
+            namespace: {{inputs.parameters.school_slug}}
+            ingress:
+              enabled: true
+              ingressClassName: public
+              host: {{inputs.parameters.school_domain}}
+            cronWorkflow:
+              enabled: true
+              targetLevel: "{{inputs.parameters.default_level}}"
+            EOF
+            git config user.name "Argo Onboarding Bot"
+            git config user.email "bot@langlearn.local"
+            git add .
+            git diff --staged --quiet || git commit -m "feat(tenant): onboard {{inputs.parameters.school_slug}}"
+            git push origin main
+        env:
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: gitops-repo-creds
+                key: token
+
+    - name: wait-namespace-ready-step
+      inputs:
+        parameters:
+          - name: school_slug
+      container:
+        image: bitnami/kubectl:1.30
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            echo "Waiting for namespace {{inputs.parameters.school_slug}} and core deployments..."
+            for i in $(seq 1 30); do
+              if kubectl get ns "{{inputs.parameters.school_slug}}" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 5
+            done
+            kubectl rollout status deployment/redis-stack -n "{{inputs.parameters.school_slug}}" --timeout=180s
+            kubectl rollout status deployment/lang-learn-api -n "{{inputs.parameters.school_slug}}" --timeout=180s
+            kubectl rollout status deployment/frontend -n "{{inputs.parameters.school_slug}}" --timeout=180s
+
+    - name: seed-text-pool-step
+      inputs:
+        parameters:
+          - name: school_slug
+      container:
+        image: ghcr.io/rickdevma100/inference:latest
+        command: [python, -c]
+        env:
+          - name: REDIS_HOST
+            value: "redis-stack.{{inputs.parameters.school_slug}}.svc.cluster.local"
+          - name: REDIS_PORT
+            value: "6379"
+        args:
+          - |
+            from src.exam.text_pool import TextPool
+            pool = TextPool()
+            seeded = pool.seed_pool(force=False)
+            print("Seeded school pool:", seeded)
+
+    - name: generate-exam-batch-step
+      synchronization:
+        semaphore:
+          configMapKeyRef:
+            name: workflow-synchronization-limits
+            key: llm-batch-lock
+      inputs:
+        parameters:
+          - name: school_slug
+          - name: level
+          - name: paper_count
+      container:
+        image: ghcr.io/rickdevma100/inference:latest
+        command: [python, -c]
+        env:
+          - name: REDIS_HOST
+            value: "redis-stack.{{inputs.parameters.school_slug}}.svc.cluster.local"
+          - name: REDIS_PORT
+            value: "6379"
+          - name: EXTERNAL_LLM_URL
+            value: "http://192.168.2.1:9090"
+        args:
+          - |
+            import asyncio
+            from src.exam.orchestrator import ExamOrchestrator
+            orch = ExamOrchestrator()
+            async def main():
+                for i in range(int("{{inputs.parameters.paper_count}}")):
+                    p_lesen = await orch.generate_paper(module="lesen", level="{{inputs.parameters.level}}")
+                    print(f"Generated Lesen paper {i+1}: {p_lesen['paper_id']}")
+                    p_schreiben = await orch.generate_paper(module="schreiben", level="{{inputs.parameters.level}}")
+                    print(f"Generated Schreiben paper {i+1}: {p_schreiben['paper_id']}")
+            asyncio.run(main())
+
+    - name: notify-admin-step
+      container:
+        image: python:3.11-slim
+        command: [python, -c]
+        args:
+          - |
+            print("Onboarding complete for {{workflow.parameters.school_slug}} at https://{{workflow.parameters.school_domain}}")

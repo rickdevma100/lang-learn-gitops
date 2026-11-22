@@ -12,11 +12,7 @@ spec:
     helm:
       releaseName: argo-workflows
       values: |
-        controller:
-          workflowNamespaces:
-            - argo
-            - lang-learn
-            - lang-learn-platform
+        singleNamespace: false
         server:
           authModes:
             - server

@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: school-tenants
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - git:
+        repoURL: https://github.com/rickdevma100/lang-learn-gitops
+        revision: main
+        directories:
+          - path: environments/tenants/*
+  template:
+    metadata:
+      name: 'tenant-{{ .path.basename }}'
+      labels:
+        tenant: '{{ .path.basename }}'
+    spec:
+      project: lang-learn
+      sources:
+        - repoURL: ghcr.io/rickdevma100/charts
+          chart: school-silo
+          targetRevision: 0.1.0
+          helm:
+            valueFiles:
+              - $values/{{ .path.path }}/values.yaml
+        - repoURL: https://github.com/rickdevma100/lang-learn-gitops
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .path.basename }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
