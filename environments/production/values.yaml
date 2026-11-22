@@ -21,7 +21,7 @@ frontend:
 optimizer:
   image:
     repository: ghcr.io/rickdevma100/optimizer
-    tag: sha-bb4f6327b7c7
+    tag: sha-3f093f9435c2
   replicas: 1
 # llamacpp config retained for rollback reference (not used with external backend)
 # llamacpp:
