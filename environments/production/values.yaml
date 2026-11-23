@@ -3,13 +3,15 @@ inference:
   image:
     repository: ghcr.io/rickdevma100/inference
     tag: sha-bf59e23157c7
+  minReplicas: 1
+  maxReplicas: 1
   backend: "external"
   model:
     path: ""
   resources:
     requests:
-      memory: "1536Mi"
-      cpu: "500m"
+      memory: "1Gi"
+      cpu: "250m"
     limits:
       memory: "3Gi"
       cpu: "2"
