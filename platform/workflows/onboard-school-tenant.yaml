@@ -69,11 +69,15 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: argoproj.io/v1alpha1
-kind: ClusterWorkflowTemplate
+kind: WorkflowTemplate
 metadata:
   name: onboard-school-tenant
+  namespace: argo
 spec:
   serviceAccountName: school-onboarder-sa
+  podMetadata:
+    labels:
+      workflow-role: onboarder
   entrypoint: onboard-pipeline
   arguments:
     parameters:
