@@ -13,6 +13,9 @@ spec:
       releaseName: argo-workflows
       values: |
         singleNamespace: false
+        workflow:
+          rbac:
+            create: false
         server:
           authModes:
             - server
