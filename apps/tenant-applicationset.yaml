@@ -21,7 +21,7 @@ spec:
       sources:
         - repoURL: ghcr.io/rickdevma100/charts
           chart: school-silo
-          targetRevision: 0.1.0
+          targetRevision: 0.1.3
           helm:
             valueFiles:
               - $values/{{ .path.path }}/values.yaml
