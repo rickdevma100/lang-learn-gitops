@@ -4,7 +4,7 @@ inference:
     repository: ghcr.io/rickdevma100/inference
     tag: sha-bf59e23157c7
   minReplicas: 1
-  maxReplicas: 1
+  maxReplicas: 2
   backend: "external"
   model:
     path: ""
